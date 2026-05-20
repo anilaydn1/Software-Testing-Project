@@ -32,17 +32,32 @@ public class ShoppingCart {
      * @param quantity number of units to add (must be > 0)
      */
     public void addItem(Product product, int quantity) {
-        // TODO (Task 3): add assert pre-condition here
+        // Pre-conditions (Task 3)
+        assert product != null : "Product must not be null";
+        assert quantity > 0 : "Quantity must be > 0";
+
+        int itemCountBefore = items.size();
+        boolean productExisted = items.stream()
+            .anyMatch(item -> item.getProduct().getId().equals(product.getId()));
 
         for (CartItem item : items) {
             if (item.getProduct().getId().equals(product.getId())) {
                 item.setQuantity(item.getQuantity() + quantity);
-                // TODO (Task 3): add assert post-condition here
+                // Post-condition: product is in cart
+                assert items.stream()
+                    .anyMatch(i -> i.getProduct().getId().equals(product.getId())) : "Product must be in cart";
+                // Invariant: total >= 0
+                assert total() >= 0 : "Invariant violated: total() < 0";
                 return;
             }
         }
         items.add(new CartItem(product, quantity));
-        // TODO (Task 3): add assert post-condition here
+        // Post-conditions: product is in cart, item count increased or product was added
+        assert items.stream()
+            .anyMatch(i -> i.getProduct().getId().equals(product.getId())) : "Product must be in cart";
+        assert items.size() >= itemCountBefore : "Item count must increase or stay same";
+        // Invariant: total >= 0
+        assert total() >= 0 : "Invariant violated: total() < 0";
     }
 
     /**
@@ -86,12 +101,18 @@ public class ShoppingCart {
      * @return the total after applying the discount
      */
     public double applyDiscount(double discountRate) {
-        // TODO (Task 3): add assert pre-condition here
+        // Pre-condition (Task 3)
+        assert discountRate >= 0 && discountRate <= 100 : "Discount rate must be in [0, 100]";
 
         double rawTotal = total();
         double discounted = rawTotal - (rawTotal * discountRate / 100);
 
-        // TODO (Task 3): add assert post-condition here
+        // Post-conditions (Task 3)
+        assert discounted <= rawTotal : "Discounted total must be <= original total";
+        assert discounted >= 0 : "Discounted total must be >= 0";
+        // Invariant: total() still >= 0
+        assert total() >= 0 : "Invariant violated: total() < 0";
+        
         return discounted;
     }
 

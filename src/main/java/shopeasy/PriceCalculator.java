@@ -35,12 +35,17 @@ public class PriceCalculator {
      * @return             the final price
      */
     public double calculate(double basePrice, double discountRate, double taxRate) {
-        // TODO (Task 3): add assert pre-conditions here
+        // Pre-conditions (Task 3)
+        assert basePrice >= 0 : "Base price must be >= 0";
+        assert discountRate >= 0 && discountRate <= 100 : "Discount rate must be in [0, 100]";
+        assert taxRate >= 0 && taxRate <= 100 : "Tax rate must be in [0, 100]";
 
         double discounted = basePrice * (1.0 - discountRate / 100.0);
         double withTax    = discounted + (discounted * taxRate / 100.0);
 
-        // TODO (Task 3): add assert post-condition here
+        // Post-condition (Task 3): result >= 0
+        assert withTax >= 0 : "Result must be >= 0";
+        
         return withTax;
     }
 
