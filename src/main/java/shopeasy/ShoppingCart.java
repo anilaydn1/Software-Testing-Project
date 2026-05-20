@@ -107,9 +107,9 @@ public class ShoppingCart {
         double rawTotal = total();
         double discounted = rawTotal - (rawTotal * discountRate / 100);
 
-        // Post-conditions (Task 3)
-        assert discounted <= rawTotal : "Discounted total must be <= original total";
-        assert discounted >= 0 : "Discounted total must be >= 0";
+        // Post-conditions (Task 3) — küçük floating-point underflow'ları tolere et
+        assert discounted <= rawTotal + 1e-9 : "Discounted total must be <= original total";
+        assert discounted >= -1e-9 : "Discounted total must be >= 0";
         // Invariant: total() still >= 0
         assert total() >= 0 : "Invariant violated: total() < 0";
         
