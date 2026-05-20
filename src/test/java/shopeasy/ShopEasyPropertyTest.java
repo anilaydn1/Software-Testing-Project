@@ -252,3 +252,4 @@ class ShopEasyPropertyTest {
                     .between(1, 10000)
         ).as((id, name, price, stock) -> new Product(id, name, price, stock));
     }
+}

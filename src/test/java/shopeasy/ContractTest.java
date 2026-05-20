@@ -348,3 +348,4 @@ class ContractTest {
             .as("Post-condition: result must be >= 0")
             .isGreaterThanOrEqualTo(0.0);
     }
+}
