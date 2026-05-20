@@ -1,6 +1,7 @@
 package shopeasy;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -51,32 +52,132 @@ class OrderProcessorMockTest {
 
     private ShoppingCart cart;
     private Product widget;
+    private Product gadget;
+
+    private static final String CUSTOMER = "customer-1";
 
     @BeforeEach
     void setUp() {
         cart   = new ShoppingCart();
         widget = new Product("P001", "Widget", 25.0, 100);
+        gadget = new Product("P002", "Gadget", 40.0, 50);
     }
 
-    // -----------------------------------------------------------------------
-    // TODO: Write your mock-based tests below.
-    //
-    // EXAMPLE STRUCTURE — happy path:
-    //
-    // @Test
-    // void process_inventoryOkAndPaymentOk_returnsOrder() {
-    //     cart.addItem(widget, 2);
-    //
-    //     when(inventoryService.isAvailable(widget, 2)).thenReturn(true);
-    //     when(paymentGateway.charge("customer-1", 50.0)).thenReturn(true);
-    //
-    //     Order order = orderProcessor.process("customer-1", cart);
-    //
-    //     assertThat(order).isNotNull();
-    //     assertThat(order.getCustomerId()).isEqualTo("customer-1");
-    //     assertThat(order.getTotal()).isEqualTo(50.0);
-    //     verify(paymentGateway).charge("customer-1", 50.0);
-    // }
-    // -----------------------------------------------------------------------
+    // --- 1) Happy path -------------------------------------------------------
 
+    @Test
+    @DisplayName("Envanter ve ödeme uygunsa geçerli bir Order döner")
+    void process_happyPath_returnsOrder() {
+        cart.addItem(widget, 2);
+
+        // Stub: ürün stokta var, ödeme de başarılı
+        when(inventoryService.isAvailable(widget, 2)).thenReturn(true);
+        when(paymentGateway.charge(CUSTOMER, 50.0)).thenReturn(true);
+
+        Order order = orderProcessor.process(CUSTOMER, cart);
+
+        assertThat(order).isNotNull();
+        assertThat(order.getCustomerId()).isEqualTo(CUSTOMER);
+        assertThat(order.getTotal()).isEqualTo(50.0);
+        assertThat(order.getItems()).hasSize(1);
+        assertThat(order.getOrderId()).isNotBlank();
+
+        // Her iki bağımlılık da beklenen şekilde çağrılmalı
+        verify(inventoryService).isAvailable(widget, 2);
+        verify(paymentGateway).charge(CUSTOMER, 50.0);
+    }
+
+    @Test
+    @DisplayName("Birden çok ürün varsa tüm kalemler için envanter sorgulanır")
+    void process_multipleItems_checksEachLine() {
+        cart.addItem(widget, 1);   // 25.0
+        cart.addItem(gadget, 2);   // 80.0  → toplam 105.0
+
+        when(inventoryService.isAvailable(widget, 1)).thenReturn(true);
+        when(inventoryService.isAvailable(gadget, 2)).thenReturn(true);
+        when(paymentGateway.charge(CUSTOMER, 105.0)).thenReturn(true);
+
+        Order order = orderProcessor.process(CUSTOMER, cart);
+
+        assertThat(order).isNotNull();
+        assertThat(order.getTotal()).isEqualTo(105.0);
+        verify(inventoryService).isAvailable(widget, 1);
+        verify(inventoryService).isAvailable(gadget, 2);
+        verify(paymentGateway).charge(CUSTOMER, 105.0);
+    }
+
+    // --- 2) Inventory failure ------------------------------------------------
+
+    @Test
+    @DisplayName("Stok yetersizse null döner ve ödeme hiç çağrılmaz")
+    void process_inventoryUnavailable_skipsPayment() {
+        cart.addItem(widget, 3);
+
+        // Stok yok — işlem burada durmalı
+        when(inventoryService.isAvailable(widget, 3)).thenReturn(false);
+
+        Order order = orderProcessor.process(CUSTOMER, cart);
+
+        assertThat(order).isNull();
+
+        // Asıl sözleşme: stok yoksa ödeme sistemine asla dokunulmaz
+        verify(paymentGateway, never()).charge(anyString(), anyDouble());
+    }
+
+    // --- 3) Payment failure --------------------------------------------------
+
+    @Test
+    @DisplayName("Stok uygun ama ödeme reddedilirse sipariş oluşmaz")
+    void process_paymentDeclined_returnsNull() {
+        cart.addItem(widget, 2);
+
+        when(inventoryService.isAvailable(widget, 2)).thenReturn(true);
+        when(paymentGateway.charge(CUSTOMER, 50.0)).thenReturn(false);
+
+        Order order = orderProcessor.process(CUSTOMER, cart);
+
+        assertThat(order).isNull();
+
+        // Ödeme tam olarak bir kez denenmiş olmalı
+        verify(paymentGateway, times(1)).charge(CUSTOMER, 50.0);
+    }
+
+    // --- 4) Partial quantity -------------------------------------------------
+    //
+    // Senaryo: sepette iki kalem var. İlk ürün stokta yeterli, ikinci üründen
+    // ise istenen miktarın tamamı bulunmuyor. Beklenen davranış: ilk kontrol
+    // geçse bile ikinci kalem `false` döndüğü an süreç durur — ne ödeme alınır
+    // ne de yarım sipariş oluşturulur (all-or-nothing).
+
+    @Test
+    @DisplayName("Bir kalem kısmen mevcutsa sipariş bütünüyle reddedilir")
+    void process_partialQuantityAvailable_rejectsWholeOrder() {
+        cart.addItem(widget, 1);
+        cart.addItem(gadget, 5);   // 5 isteniyor ama deponun elinde sadece bir kaçı var
+
+        when(inventoryService.isAvailable(widget, 1)).thenReturn(true);
+        when(inventoryService.isAvailable(gadget, 5)).thenReturn(false);
+
+        Order order = orderProcessor.process(CUSTOMER, cart);
+
+        assertThat(order).isNull();
+
+        // İlk kalem kontrol edilmiş olmalı, eksik olan kalem de sorgulanmış olmalı
+        verify(inventoryService).isAvailable(widget, 1);
+        verify(inventoryService).isAvailable(gadget, 5);
+        // Yetersiz stok varsa ödeme adımına geçilmez
+        verify(paymentGateway, never()).charge(anyString(), anyDouble());
+    }
+
+    // --- Ek doğrulamalar: girdi sözleşmeleri ---------------------------------
+
+    @Test
+    @DisplayName("Boş sepet işlenmeye çalışılırsa IllegalArgumentException fırlatılır")
+    void process_emptyCart_throws() {
+        assertThatThrownBy(() -> orderProcessor.process(CUSTOMER, cart))
+            .isInstanceOf(IllegalArgumentException.class);
+
+        // Hiçbir bağımlılık çağrılmamış olmalı
+        verifyNoInteractions(inventoryService, paymentGateway);
+    }
 }
