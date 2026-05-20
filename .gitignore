@@ -5,3 +5,4 @@ target/
 *.class
 .claude/
 .jqwik-database
+build_reflection_pdf.py
